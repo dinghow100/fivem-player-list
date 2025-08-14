@@ -39,7 +39,7 @@
       <label class="chip"><input id="hl" type="checkbox" checked/> Highlight</label>
       <span class="chip"><input id="cap" type="checkbox" checked/> Cap 1500</span>
       <span class="chip"><span class="dot" id="led" style="background:#64748b"></span><span id="state">Idle</span></span>
-      <span class="chip">Proxy: fivemplayerlist.dinghow1.workers.dev</span>
+      <span class="chip" id="proxyChip">Proxy: (loading)</span>
     </div>
     <div id="status">Idle.</div>
   </form>
@@ -51,36 +51,41 @@
 
 <script>
   // ---- Config ----
-  const PROXY = "https://fivemplayerlist.dinghow1.workers.dev/stream"; // your Worker
+  // allow ?proxy=... override, otherwise use your Vercel proxy
+  const urlProxy = (() => { try { return new URL(location.href).searchParams.get('proxy'); } catch { return null; } })();
+  const PROXY = urlProxy || "https://fivem-vercel-proxy-ding.vercel.app/api/stream";
   const DETAIL_URL = id => `https://servers.fivem.net/servers/detail/${id}`;
   const JOIN_URL   = id => `https://cfx.re/join/${id}`;
 
   // ---- UI refs ----
-  const form = document.getElementById('searchForm') || document.getElementById('f');
-  const nameEl = document.getElementById('name') || document.getElementById('q');
+  const form = document.getElementById('f');
+  const nameEl = document.getElementById('q');
   const exactEl = document.getElementById('exact');
-  const highlightEl = document.getElementById('highlight') || document.getElementById('hl');
+  const highlightEl = document.getElementById('hl');
   const capEl = document.getElementById('cap');
   const stopBtn = document.getElementById('stopBtn');
   const statusEl = document.getElementById('status');
-  const stateEl = document.getElementById('state') || document.getElementById('stateText');
+  const stateEl = document.getElementById('state');
   const ledEl = document.getElementById('led');
-  const tbody = (document.querySelector('#results tbody') || document.querySelector('#t tbody'));
+  const proxyChip = document.getElementById('proxyChip');
+  const tbody = document.querySelector('#t tbody');
+
+  // show proxy host in chip
+  try { proxyChip.textContent = 'Proxy: ' + new URL(PROXY).hostname; } catch { proxyChip.textContent = 'Proxy: set error'; }
 
   // default: partial match
-  if (exactEl) exactEl.checked = false;
+  exactEl.checked = false;
 
   let controller = null, stopFlag = false, resultCount = 0;
 
-  const setState = (txt, color) => { if (stateEl) stateEl.textContent = txt; if (ledEl) ledEl.style.background = color; };
+  const setState = (txt, color) => { stateEl.textContent = txt; ledEl.style.background = color; };
   const esc = s => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   const stripFx = s => String(s || '').replace(/\^[0-9]/g, '');
   const normalize = s => stripFx(s).toLowerCase();
   const matchName = (cand, q, exact) => typeof cand === 'string' && (exact ? normalize(cand) === q : normalize(cand).includes(q));
   const fmtName = (name, q) => {
     const clean = stripFx(name);
-    const hl = highlightEl && highlightEl.checked;
-    if (!hl) return esc(clean);
+    if (!highlightEl.checked) return esc(clean);
     const i = clean.toLowerCase().indexOf(q);
     if (i < 0) return esc(clean);
     return esc(clean.slice(0,i)) + '<mark>' + esc(clean.slice(i, i+q.length)) + '</mark>' + esc(clean.slice(i+q.length));
@@ -107,7 +112,7 @@
     const players = Array.isArray(data.players) ? data.players : (Array.isArray(obj.players) ? obj.players : []);
     const found = players.filter(p => matchName(p?.name, qn, exact));
     for (const p of found) {
-      if (!capEl || !capEl.checked || resultCount < 1500) {
+      if (!capEl.checked || resultCount < 1500) {
         renderRow(String(p?.name || '(unknown)'), hostname, id, clients, rawQuery.toLowerCase());
         resultCount++;
       }
@@ -140,14 +145,11 @@
         if (done) break;
         buf += dec.decode(value, { stream: true });
 
-        // split to SSE frames (handles \n\n or \r\n\r\n)
         const frames = buf.split(/\r?\n\r?\n/);
         buf = frames.pop() || '';
         for (const frame of frames) {
           const lines = frame.split(/\r?\n/);
-          for (const line of lines) {
-            if (line.startsWith('data:')) dataBuf += line.slice(5).trim();
-          }
+          for (const line of lines) if (line.startsWith('data:')) dataBuf += line.slice(5).trim();
           if (dataBuf) {
             try {
               const obj = JSON.parse(dataBuf);
@@ -166,8 +168,7 @@
     }
 
     // --- Path 2: JSON dump (application/json) ---
-    // accumulate the whole body, then parse
-    const text = await res.text(); // (CF already decompresses br for fetch)
+    const text = await res.text();
     try {
       const json = JSON.parse(text);
       const list =
@@ -184,7 +185,6 @@
           if (serversScanned % 500 === 0) statusEl.textContent = `Servers scanned: ${serversScanned.toLocaleString()} • Matches: ${matchesFound.toLocaleString()}`;
         }
       } else if (json && typeof json === 'object') {
-        // fallback: try to interpret as an object-of-objects, or a single server
         let iter = [];
         try { iter = Object.values(json); } catch {}
         if (iter.length === 0) iter = [json];
@@ -209,15 +209,15 @@
     tbody.innerHTML = '';
     resultCount = 0; stopFlag = false;
     setState('Connecting…', '#7aa2ff');
-    if (stopBtn) stopBtn.disabled = false;
+    stopBtn.disabled = false;
 
-    runSearch(PROXY, query, exactEl && exactEl.checked).catch(err => {
+    runSearch(PROXY, query, exactEl.checked).catch(err => {
       setState('Error', '#ef4444');
       statusEl.textContent = `Error: ${err.message || err}`;
-    }).finally(() => { if (stopBtn) stopBtn.disabled = true; });
+    }).finally(() => { stopBtn.disabled = true; });
   });
 
-  if (stopBtn) stopBtn.addEventListener('click', () => {
+  stopBtn.addEventListener('click', () => {
     stopFlag = true;
     if (controller) controller.abort();
     setState('Stopped', '#f59e0b');
