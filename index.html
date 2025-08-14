@@ -78,11 +78,13 @@
           <label class="chip"><input id="highlight" type="checkbox" checked /> Highlight matches</label>
           <span class="chip" title="The stream is large; this keeps memory sane."><input id="cap" type="checkbox" checked /> Cap results at 1500</span>
           <span class="chip"><span class="dot" id="led" style="background:#64748b"></span><span id="stateText">Idle</span></span>
+          <button type="button" class="chip" id="setProxyBtn" title="Set a Cloudflare Worker / proxy URL so GitHub Pages can access the stream">Set Proxy</button>
+          <span class="chip" id="proxyStatus">Proxy: none</span>
         </div>
         <div id="status">Idle.</div>
       </form>
 
-      <div class="hint">Tip: This uses the official <code>servers-frontend.fivem.net</code> stream. If your browser shows a CORS error, open this file via a local web server (e.g. <code>npx serve</code>) and try again.</div>
+      <div class="hint">Hosting on GitHub Pages? You <span class="warn">must</span> set a stream proxy because the FiveM global list is an SSE endpoint with CORS. Click <strong>Set Proxy</strong> and paste your Worker URL (it should end with <code>/stream</code>). You can also pass it via the URL like <code>?proxy=https%3A%2F%2Fyour-worker.workers.dev%2Fstream</code>.</div>
 
       <table id="results">
         <thead>
@@ -101,13 +103,28 @@
   </section>
 
   <script>
+    // --- Proxy handling ------------------------------------------------------
+    function getProxyFromUrlOrStorage() {
+      let proxy = null;
+      try {
+        const u = new URL(window.location.href);
+        const p = u.searchParams.get('proxy');
+        if (p) {
+          proxy = p;
+          localStorage.setItem('proxyUrl', proxy);
+        } else {
+          proxy = localStorage.getItem('proxyUrl');
+        }
+      } catch (_) { /* ignore */ }
+      return proxy || null;
+    }
+
+    const PROXY_URL = getProxyFromUrlOrStorage();
+
+    // Order of candidates: user proxy (if set) -> direct (may be CORS) -> timestamped variant
     const STREAM_CANDIDATES = [
-      // Placeholder: worker URL can be injected via ?proxy=... in the page URL
-      // e.g. https://your-site.github.io/?proxy=https%3A%2F%2Fyour-worker.workers.dev%2Fstream
-      // If provided, it will be used first automatically.
-      "http://127.0.0.1:8787/stream",
-      "http://localhost:8787/stream",
-      "https://servers-frontend.fivem.net/api/servers/stream",
+      ...(PROXY_URL ? [PROXY_URL] : []),
+      'https://servers-frontend.fivem.net/api/servers/stream',
       () => `https://servers-frontend.fivem.net/api/servers/stream/${Math.floor(Date.now()/1000)}`
     ];
 
@@ -126,6 +143,30 @@
     const ledEl = document.getElementById('led');
     const stateTextEl = document.getElementById('stateText');
     const tbody = document.querySelector('#results tbody');
+    const proxyStatus = document.getElementById('proxyStatus');
+
+    // Show proxy status
+    try {
+      proxyStatus.textContent = 'Proxy: ' + (PROXY_URL ? new URL(PROXY_URL).hostname : 'none');
+    } catch { proxyStatus.textContent = 'Proxy: invalid'; }
+
+    // Allow setting proxy interactively
+    document.getElementById('setProxyBtn').addEventListener('click', () => {
+      const current = localStorage.getItem('proxyUrl') || '';
+      const val = prompt('Enter stream proxy URL (must end with /stream):', current);
+      if (val === null) return;
+      const trimmed = val.trim();
+      if (trimmed === '') {
+        localStorage.removeItem('proxyUrl');
+        alert('Proxy cleared. Reloading…');
+        location.reload();
+        return;
+      }
+      try { new URL(trimmed); } catch { alert('Invalid URL'); return; }
+      localStorage.setItem('proxyUrl', trimmed);
+      alert('Proxy saved. Reloading…');
+      location.reload();
+    });
 
     document.getElementById('searchForm').addEventListener('submit', (e) => {
       e.preventDefault();
@@ -138,7 +179,7 @@
       document.getElementById('stopBtn').disabled = false;
       runWithFallback(query, exactEl.checked).catch((err) => {
         setState('Error', '#ef4444');
-        statusEl.innerHTML = `Error: ${escapeHtml(err.message || err)}. <span class="hint">On GitHub Pages you likely need a proxy (see README). Add your proxy URL at the top of <code>STREAM_CANDIDATES</code>.</span>`;
+        statusEl.innerHTML = `Error: ${escapeHtml(err.message || err)}. <span class="hint">If you are on GitHub Pages, set a proxy via the button above or add <code>?proxy=...</code> to the URL.</span>`;
         console.error(err);
       }).finally(() => {
         document.getElementById('stopBtn').disabled = true;
@@ -157,31 +198,6 @@
     }
 
     async function runWithFallback(query, exact) {
-      let lastErr;
-
-      // allow ?proxy=... to override first candidate
-      try {
-        const u = new URL(window.location.href);
-        const proxy = u.searchParams.get('proxy');
-        if (proxy) {
-          // put proxy first in candidates
-          STREAM_CANDIDATES.unshift(proxy);
-        }
-      } catch (_) {}
-
-      for (const cand of STREAM_CANDIDATES) {
-        const url = typeof cand === 'function' ? cand() : cand;
-        try {
-          await runSearch(url, query, exact);
-          return;
-        } catch (e) {
-          lastErr = e;
-          if (stopFlag) break;
-          console.warn('Stream candidate failed:', url, e);
-        }
-      }
-      throw lastErr || new Error('No working stream endpoint.');
-    }
       let lastErr;
       for (const cand of STREAM_CANDIDATES) {
         const url = typeof cand === 'function' ? cand() : cand;
