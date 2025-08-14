@@ -51,6 +51,12 @@
 
 <script>
 const PROXY = "https://fivemplayerlist.dinghow1.workers.dev/stream"; // <-- your proxy (hard-wired)
+// Hard-wired proxy for GitHub Pages
+const STREAM_CANDIDATES = [
+  "https://fivemplayerlist.dinghow1.workers.dev/stream",
+  "https://servers-frontend.fivem.net/api/servers/stream",
+  () => `https://servers-frontend.fivem.net/api/servers/stream/${Math.floor(Date.now()/1000)}`
+];
 
 const DETAIL_URL = id => `https://servers.fivem.net/servers/detail/${id}`;
 const JOIN_URL   = id => `https://cfx.re/join/${id}`;
