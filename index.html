@@ -6,10 +6,12 @@
 <title>FiveM Global Player Finder</title>
 <style>
   :root{--bg:#0b0e13;--card:#11161f;--fg:#e6edf3;--muted:#9aa4b2;--border:#1f2a37;--accent:#7aa2ff}
-  *{box-sizing:border-box}body{margin:0;background:#0b0e13;color:var(--fg);font-family:system-ui,Segoe UI,Roboto,Arial,sans-serif}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--fg);font-family:system-ui,Segoe UI,Roboto,Arial,sans-serif}
   header{padding:24px 16px 6px;text-align:center}
-  h1{margin:0 0 6px;font-size:24px} .sub{color:var(--muted);font-size:13px;margin:0}
-  .card{max-width:1100px;margin:18px auto;background:#11161f;border:1px solid var(--border);border-radius:14px}
+  h1{margin:0 0 6px;font-size:24px}
+  .sub{color:var(--muted);font-size:13px;margin:0}
+  .card{max-width:1100px;margin:18px auto;background:var(--card);border:1px solid var(--border);border-radius:14px}
   .content{padding:16px}
   form{display:grid;grid-template-columns:1fr auto auto;gap:10px;align-items:center}
   input[type=text]{padding:10px 12px;border-radius:10px;border:1px solid var(--border);background:#0b1220;color:var(--fg)}
@@ -17,10 +19,13 @@
   .btn.primary{background:linear-gradient(180deg,var(--accent),#5b87ff);border:none;color:#fff}
   .chips{grid-column:1 / -1;display:flex;gap:10px;flex-wrap:wrap;color:var(--muted);font-size:13px;margin-top:4px}
   .chip{display:inline-flex;gap:8px;align-items:center;border:1px solid var(--border);padding:6px 10px;border-radius:999px;background:#0b1220}
-  .dot{width:8px;height:8px;border-radius:50%} #status{font-size:12px;color:var(--muted);margin-top:6px}
+  .dot{width:8px;height:8px;border-radius:50%}
+  #status{font-size:12px;color:var(--muted);margin-top:6px}
+  select{background:#0b1220;border:1px solid var(--border);color:var(--fg);border-radius:8px;padding:5px 8px}
   table{width:100%;border-collapse:collapse;margin-top:10px}
   thead{position:sticky;top:0;background:#0c1220;box-shadow:0 1px 0 var(--border)}
   th,td{padding:9px 10px;border-bottom:1px solid var(--border);font-size:14px;text-align:left}
+  mark{background:#334155;color:#fff;padding:0 2px;border-radius:3px}
 </style>
 </head>
 <body>
@@ -34,10 +39,27 @@
     <input id="q" type="text" placeholder="Type a player name (e.g. matthew)"/>
     <button class="btn primary" type="submit">Search</button>
     <button class="btn" type="button" id="stopBtn">Stop</button>
+
     <div class="chips">
       <label class="chip"><input id="exact" type="checkbox"/> Exact match</label>
       <label class="chip"><input id="hl" type="checkbox" checked/> Highlight</label>
       <span class="chip"><input id="cap" type="checkbox" checked/> Cap 1500</span>
+
+      <!-- Region/Country filter (optional) -->
+      <span class="chip">
+        <label for="region">Region:</label>
+        <select id="region">
+          <option value="">Any</option>
+          <option value="NA">NA</option>
+          <option value="EU">EU</option>
+          <option value="AS">AS</option>
+          <option value="OCE">OCE</option>
+          <option value="AF">AF</option>
+          <option value="SA">SA</option>
+        </select>
+        <input id="country" type="text" placeholder="or country (US, GB…)" style="width:120px;margin-left:6px;background:#0b1220;border:1px solid var(--border);color:inherit;border-radius:8px;padding:5px 8px">
+      </span>
+
       <span class="chip"><span class="dot" id="led" style="background:#64748b"></span><span id="state">Idle</span></span>
       <span class="chip" id="proxyChip">Proxy: (loading)</span>
     </div>
@@ -45,19 +67,21 @@
   </form>
 
   <table id="t"><thead>
-    <tr><th>Player</th><th>Server</th><th>Server ID</th><th>Players</th><th>Join</th><th>Details</th></tr>
+    <tr>
+      <th>Player</th><th>Server</th><th>Locale</th><th>Server ID</th><th>Players</th><th>Join</th><th>Details</th>
+    </tr>
   </thead><tbody></tbody></table>
 </div></section>
 
 <script>
-  // ---- Config ----
-  // allow ?proxy=... override, otherwise use your Vercel proxy
+  // ===== Config =====
+  // You can override via ?proxy=..., otherwise we use your Vercel proxy:
   const urlProxy = (() => { try { return new URL(location.href).searchParams.get('proxy'); } catch { return null; } })();
-  const PROXY = urlProxy || "https://fivem-vercel-proxy-ding.vercel.app/api/stream";
+  const PROXY = urlProxy || "https://fivem-vercel-proxy-new.vercel.app/api/stream";
   const DETAIL_URL = id => `https://servers.fivem.net/servers/detail/${id}`;
   const JOIN_URL   = id => `https://cfx.re/join/${id}`;
 
-  // ---- UI refs ----
+  // ===== UI refs =====
   const form = document.getElementById('f');
   const nameEl = document.getElementById('q');
   const exactEl = document.getElementById('exact');
@@ -68,16 +92,17 @@
   const stateEl = document.getElementById('state');
   const ledEl = document.getElementById('led');
   const proxyChip = document.getElementById('proxyChip');
+  const regionEl  = document.getElementById('region');
+  const countryEl = document.getElementById('country');
   const tbody = document.querySelector('#t tbody');
 
   // show proxy host in chip
   try { proxyChip.textContent = 'Proxy: ' + new URL(PROXY).hostname; } catch { proxyChip.textContent = 'Proxy: set error'; }
-
-  // default: partial match
   exactEl.checked = false;
 
   let controller = null, stopFlag = false, resultCount = 0;
 
+  // ===== Helpers =====
   const setState = (txt, color) => { stateEl.textContent = txt; ledEl.style.background = color; };
   const esc = s => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   const stripFx = s => String(s || '').replace(/\^[0-9]/g, '');
@@ -90,12 +115,43 @@
     if (i < 0) return esc(clean);
     return esc(clean.slice(0,i)) + '<mark>' + esc(clean.slice(i, i+q.length)) + '</mark>' + esc(clean.slice(i+q.length));
   };
+  const getLocale = (d) => (d?.vars?.locale || d?.vars?.country || d?.locale || "").toString();
 
-  function renderRow(playerName, hostname, id, clients, q) {
+  // Macro region maps (basic coverage)
+  const REGIONS = {
+    NA: new Set(['US','CA','MX','PR','CR','PA','GT','HN','NI','SV','BZ','DO','HT','CU','JM','TT','BB','BS','AG','DM','GD','KN','LC','VC','AW','CW','SX','KY','BM']),
+    SA: new Set(['AR','BO','BR','CL','CO','EC','GY','PY','PE','SR','UY','VE','FK']),
+    EU: new Set(['AL','AD','AT','BA','BE','BG','BY','CH','CY','CZ','DE','DK','EE','ES','FI','FR','GB','GR','HR','HU','IE','IS','IT','LI','LT','LU','LV','MC','MD','ME','MK','MT','NL','NO','PL','PT','RO','RS','RU','SE','SI','SK','SM','UA','VA','XK']),
+    OCE:new Set(['AU','NZ','PG','FJ','SB','VU','WS','TO','KI','TV','NR','NC','PF','GU','MP','AS']),
+    AF: new Set(['DZ','AO','BJ','BW','BF','BI','CM','CV','CF','TD','KM','CG','CD','CI','DJ','EG','GQ','ER','ET','GA','GM','GH','GN','GW','KE','LS','LR','LY','MG','MW','ML','MR','MU','MA','MZ','NA','NE','NG','RE','RW','ST','SN','SC','SL','SO','ZA','SS','SD','SZ','TZ','TG','TN','UG','YT','ZM','ZW']),
+    AS: new Set(['AE','AF','AM','AZ','BD','BH','BN','BT','CN','GE','HK','ID','IL','IN','IQ','IR','JO','JP','KG','KH','KP','KR','KW','KZ','LA','LB','LK','MM','MN','MO','MY','NP','OM','PH','PK','PS','QA','SA','SG','SY','TH','TJ','TL','TM','TR','TW','UZ','VN','YE'])
+  };
+  function inferredCountry(data, hostname){
+    let cc = "";
+    const locale = getLocale(data); // e.g., en-US or pt_BR
+    if (locale){
+      const m = locale.match(/([A-Za-z]{2})(?:[^A-Za-z]|$)/g);
+      if (m){ const last = m[m.length-1].replace(/[^A-Za-z]/g,''); if (last.length===2) cc = last.toUpperCase(); }
+    }
+    if (!cc && hostname){
+      const tag = String(hostname).match(/[\[(\s-]([A-Z]{2})[\])\s-]/);
+      if (tag) cc = tag[1].toUpperCase();
+    }
+    return cc;
+  }
+  function regionMatches(cc, regionCode){
+    if (!regionCode) return true;
+    const set = REGIONS[regionCode]; if (!set) return true;
+    return cc && set.has(cc);
+  }
+
+  function renderRow(playerName, hostname, id, clients, q, data) {
     const tr = document.createElement('tr');
+    const locale = getLocale(data).toUpperCase();
     tr.innerHTML = `
       <td>${fmtName(playerName, q)}</td>
       <td>${esc(hostname)}</td>
+      <td>${esc(locale)}</td>
       <td><code>${esc(id || '')}</code></td>
       <td>${Number(clients) || 0}</td>
       <td>${id ? `<a href="${JOIN_URL(id)}" target="_blank" rel="noopener">Join</a>` : '-'}</td>
@@ -109,11 +165,23 @@
     const data = obj.Data || obj.data || {};
     const hostname = stripFx(data.hostname || data.sv_projectName || '');
     const clients = data.clients ?? obj.clients ?? 0;
-    const players = Array.isArray(data.players) ? data.players : (Array.isArray(obj.players) ? obj.players : []);
+
+    // region / country filter
+    const wantRegion  = (regionEl?.value || '').toUpperCase();
+    const wantCountry = (countryEl?.value || '').trim().toUpperCase();
+    const cc = inferredCountry(data, hostname);
+    if (wantCountry) {
+      if (!cc || cc !== wantCountry) return 0;
+    } else if (wantRegion) {
+      if (!regionMatches(cc, wantRegion)) return 0;
+    }
+
+    const players = Array.isArray(data.players) ? data.players :
+                    (Array.isArray(obj.players) ? obj.players : []);
     const found = players.filter(p => matchName(p?.name, qn, exact));
     for (const p of found) {
       if (!capEl.checked || resultCount < 1500) {
-        renderRow(String(p?.name || '(unknown)'), hostname, id, clients, rawQuery.toLowerCase());
+        renderRow(String(p?.name || '(unknown)'), hostname, id, clients, rawQuery.toLowerCase(), data);
         resultCount++;
       }
     }
@@ -135,7 +203,7 @@
     const qn = normalize(query);
     let serversScanned = 0, matchesFound = 0;
 
-    // --- Path 1: proper SSE ---
+    // --- Proper SSE ---
     if (ct.includes('event-stream')) {
       const reader = res.body.getReader();
       const dec = new TextDecoder('utf-8');
@@ -145,11 +213,14 @@
         if (done) break;
         buf += dec.decode(value, { stream: true });
 
+        // split frames on blank line
         const frames = buf.split(/\r?\n\r?\n/);
         buf = frames.pop() || '';
         for (const frame of frames) {
           const lines = frame.split(/\r?\n/);
-          for (const line of lines) if (line.startsWith('data:')) dataBuf += line.slice(5).trim();
+          for (const line of lines) {
+            if (line.startsWith('data:')) dataBuf += line.slice(5).trim();
+          }
           if (dataBuf) {
             try {
               const obj = JSON.parse(dataBuf);
@@ -159,7 +230,8 @@
             dataBuf = '';
           }
         }
-        if (serversScanned % 200 === 0) statusEl.textContent = `Servers scanned: ${serversScanned.toLocaleString()} • Matches: ${matchesFound.toLocaleString()}`;
+        if (serversScanned % 200 === 0)
+          statusEl.textContent = `Servers scanned: ${serversScanned.toLocaleString()} • Matches: ${matchesFound.toLocaleString()}`;
         if (stopFlag) break;
       }
       setState('Done', '#22c55e');
@@ -167,7 +239,7 @@
       return;
     }
 
-    // --- Path 2: JSON dump (application/json) ---
+    // --- JSON dump fallback ---
     const text = await res.text();
     try {
       const json = JSON.parse(text);
@@ -182,7 +254,8 @@
         for (const obj of list) {
           serversScanned++;
           matchesFound += handleServerObject(obj, qn, !!exact, query);
-          if (serversScanned % 500 === 0) statusEl.textContent = `Servers scanned: ${serversScanned.toLocaleString()} • Matches: ${matchesFound.toLocaleString()}`;
+          if (serversScanned % 500 === 0)
+            statusEl.textContent = `Servers scanned: ${serversScanned.toLocaleString()} • Matches: ${matchesFound.toLocaleString()}`;
         }
       } else if (json && typeof json === 'object') {
         let iter = [];
@@ -201,7 +274,7 @@
     }
   }
 
-  // wire up UI
+  // Wire up UI
   form.addEventListener('submit', (e) => {
     e.preventDefault();
     const query = nameEl.value.trim();
