@@ -102,12 +102,11 @@
 
   <script>
     const STREAM_CANDIDATES = [
-      // If you host a Cloudflare Worker proxy, put it first:
-      // e.g. "https://YOUR_WORKER_SUBDOMAIN.workers.dev/stream",
-      // Local proxy (for testing):
+      // Placeholder: worker URL can be injected via ?proxy=... in the page URL
+      // e.g. https://your-site.github.io/?proxy=https%3A%2F%2Fyour-worker.workers.dev%2Fstream
+      // If provided, it will be used first automatically.
       "http://127.0.0.1:8787/stream",
       "http://localhost:8787/stream",
-      // Direct public streams (may be blocked by CORS in some browsers / on GitHub Pages)
       "https://servers-frontend.fivem.net/api/servers/stream",
       () => `https://servers-frontend.fivem.net/api/servers/stream/${Math.floor(Date.now()/1000)}`
     ];
@@ -158,6 +157,31 @@
     }
 
     async function runWithFallback(query, exact) {
+      let lastErr;
+
+      // allow ?proxy=... to override first candidate
+      try {
+        const u = new URL(window.location.href);
+        const proxy = u.searchParams.get('proxy');
+        if (proxy) {
+          // put proxy first in candidates
+          STREAM_CANDIDATES.unshift(proxy);
+        }
+      } catch (_) {}
+
+      for (const cand of STREAM_CANDIDATES) {
+        const url = typeof cand === 'function' ? cand() : cand;
+        try {
+          await runSearch(url, query, exact);
+          return;
+        } catch (e) {
+          lastErr = e;
+          if (stopFlag) break;
+          console.warn('Stream candidate failed:', url, e);
+        }
+      }
+      throw lastErr || new Error('No working stream endpoint.');
+    }
       let lastErr;
       for (const cand of STREAM_CANDIDATES) {
         const url = typeof cand === 'function' ? cand() : cand;
