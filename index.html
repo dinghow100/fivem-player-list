@@ -50,10 +50,10 @@
 </div></section>
 
 <script>
-  // ---- Settings ----
-  const PROXY = "https://fivemplayerlist.dinghow1.workers.dev/stream"; // your Cloudflare Worker
-  const DETAIL_URL = (id) => `https://servers.fivem.net/servers/detail/${id}`;
-  const JOIN_URL   = (id) => `https://cfx.re/join/${id}`;
+  // ---- Config ----
+  const PROXY = "https://fivemplayerlist.dinghow1.workers.dev/stream"; // your Worker
+  const DETAIL_URL = id => `https://servers.fivem.net/servers/detail/${id}`;
+  const JOIN_URL   = id => `https://cfx.re/join/${id}`;
 
   // ---- UI refs ----
   const form = document.getElementById('searchForm') || document.getElementById('f');
@@ -63,33 +63,27 @@
   const capEl = document.getElementById('cap');
   const stopBtn = document.getElementById('stopBtn');
   const statusEl = document.getElementById('status');
-  const stateTextEl = document.getElementById('state') || document.getElementById('stateText');
+  const stateEl = document.getElementById('state') || document.getElementById('stateText');
   const ledEl = document.getElementById('led');
   const tbody = (document.querySelector('#results tbody') || document.querySelector('#t tbody'));
 
-  // Default: partial match
+  // default: partial match
   if (exactEl) exactEl.checked = false;
 
-  let controller = null;
-  let stopFlag = false;
-  let resultCount = 0;
+  let controller = null, stopFlag = false, resultCount = 0;
 
-  const setState = (txt, color) => {
-    if (stateTextEl) stateTextEl.textContent = txt;
-    if (ledEl) ledEl.style.background = color;
-  };
-
+  const setState = (txt, color) => { if (stateEl) stateEl.textContent = txt; if (ledEl) ledEl.style.background = color; };
+  const esc = s => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   const stripFx = s => String(s || '').replace(/\^[0-9]/g, '');
   const normalize = s => stripFx(s).toLowerCase();
-  const esc = s => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   const matchName = (cand, q, exact) => typeof cand === 'string' && (exact ? normalize(cand) === q : normalize(cand).includes(q));
-
   const fmtName = (name, q) => {
     const clean = stripFx(name);
-    if (!highlightEl || !highlightEl.checked) return esc(clean);
+    const hl = highlightEl && highlightEl.checked;
+    if (!hl) return esc(clean);
     const i = clean.toLowerCase().indexOf(q);
     if (i < 0) return esc(clean);
-    return esc(clean.slice(0, i)) + '<mark>' + esc(clean.slice(i, i + q.length)) + '</mark>' + esc(clean.slice(i + q.length));
+    return esc(clean.slice(0,i)) + '<mark>' + esc(clean.slice(i, i+q.length)) + '</mark>' + esc(clean.slice(i+q.length));
   };
 
   function renderRow(playerName, hostname, id, clients, q) {
@@ -105,11 +99,25 @@
     tbody.appendChild(tr);
   }
 
+  function handleServerObject(obj, qn, exact, rawQuery) {
+    const id = obj.ID || obj.id || obj.EndPoint || obj.endpoint;
+    const data = obj.Data || obj.data || {};
+    const hostname = stripFx(data.hostname || data.sv_projectName || '');
+    const clients = data.clients ?? obj.clients ?? 0;
+    const players = Array.isArray(data.players) ? data.players : (Array.isArray(obj.players) ? obj.players : []);
+    const found = players.filter(p => matchName(p?.name, qn, exact));
+    for (const p of found) {
+      if (!capEl || !capEl.checked || resultCount < 1500) {
+        renderRow(String(p?.name || '(unknown)'), hostname, id, clients, rawQuery.toLowerCase());
+        resultCount++;
+      }
+    }
+    return found.length > 0 ? 1 : 0;
+  }
+
   async function runSearch(url, query, exact) {
     setState('Scanning…', '#2dd4bf');
-    const ac = new AbortController();
-    controller = ac;
-
+    const ac = new AbortController(); controller = ac;
     const res = await fetch(url, {
       signal: ac.signal,
       headers: { 'Accept': 'text/event-stream' },
@@ -118,74 +126,82 @@
     });
     if (!res.ok || !res.body) throw new Error(`Stream not available (${res.status})`);
 
-    const reader = res.body.getReader();
-    const decoder = new TextDecoder('utf-8');
-
-    let serversScanned = 0, matchesFound = 0;
+    const ct = (res.headers.get('content-type') || '').toLowerCase();
     const qn = normalize(query);
-    let buf = '';         // raw byte-to-text buffer
-    let eventBuf = '';    // accumulates multi-line "data:" payloads
+    let serversScanned = 0, matchesFound = 0;
 
-    // Helper: flush an SSE event
-    const flushEvent = () => {
-      if (!eventBuf) return;
-      try {
-        const obj = JSON.parse(eventBuf);
-        serversScanned++;
+    // --- Path 1: proper SSE ---
+    if (ct.includes('event-stream')) {
+      const reader = res.body.getReader();
+      const dec = new TextDecoder('utf-8');
+      let buf = '', dataBuf = '';
+      while (true) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        buf += dec.decode(value, { stream: true });
 
-        const id = obj.ID || obj.id || obj.EndPoint || obj.endpoint;
-        const data = obj.Data || obj.data || {};
-        const hostname = stripFx(data.hostname || data.sv_projectName || '');
-        const clients = data.clients ?? 0;
-        const players = Array.isArray(data.players) ? data.players : [];
-
-        const found = players.filter(p => matchName(p?.name, qn, !!exact));
-        for (const p of found) {
-          if (!capEl || !capEl.checked || resultCount < 1500) {
-            renderRow(String(p?.name || '(unknown)'), hostname, obj.ID || obj.id, clients, query.toLowerCase());
-            matchesFound++; resultCount++;
+        // split to SSE frames (handles \n\n or \r\n\r\n)
+        const frames = buf.split(/\r?\n\r?\n/);
+        buf = frames.pop() || '';
+        for (const frame of frames) {
+          const lines = frame.split(/\r?\n/);
+          for (const line of lines) {
+            if (line.startsWith('data:')) dataBuf += line.slice(5).trim();
+          }
+          if (dataBuf) {
+            try {
+              const obj = JSON.parse(dataBuf);
+              serversScanned++;
+              matchesFound += handleServerObject(obj, qn, !!exact, query);
+            } catch {}
+            dataBuf = '';
           }
         }
-      } catch { /* ignore malformed frames */ }
-      eventBuf = '';
-    };
-
-    while (true) {
-      const { value, done } = await reader.read();
-      if (done) break;
-
-      buf += decoder.decode(value, { stream: true });
-
-      // Split on double newlines (handles \n\n or \r\n\r\n)
-      const frames = buf.split(/\r?\n\r?\n/);
-      buf = frames.pop() || '';
-
-      for (const frame of frames) {
-        const lines = frame.split(/\r?\n/);
-        for (const line of lines) {
-          if (line.startsWith('data:')) {
-            eventBuf += line.slice(5).trim();
-          }
-          // other SSE fields (id:, event:) are ignored
-        }
-        flushEvent();
-
-        if (serversScanned % 200 === 0) {
-          statusEl.textContent = `Servers scanned: ${serversScanned.toLocaleString()} • Matches: ${matchesFound.toLocaleString()}`;
-        }
+        if (serversScanned % 200 === 0) statusEl.textContent = `Servers scanned: ${serversScanned.toLocaleString()} • Matches: ${matchesFound.toLocaleString()}`;
+        if (stopFlag) break;
       }
-
-      if (stopFlag) break;
+      setState('Done', '#22c55e');
+      statusEl.textContent = `Servers scanned: ${serversScanned.toLocaleString()} • Matches: ${matchesFound.toLocaleString()}`;
+      return;
     }
 
-    // flush last partial
-    flushEvent();
+    // --- Path 2: JSON dump (application/json) ---
+    // accumulate the whole body, then parse
+    const text = await res.text(); // (CF already decompresses br for fetch)
+    try {
+      const json = JSON.parse(text);
+      const list =
+        Array.isArray(json) ? json :
+        Array.isArray(json.servers) ? json.servers :
+        Array.isArray(json.data) ? json.data :
+        Array.isArray(json.result) ? json.result :
+        (json.servers && typeof json.servers === 'object' ? Object.values(json.servers) : null);
 
-    setState('Done', '#22c55e');
-    statusEl.textContent = `Servers scanned: ${serversScanned.toLocaleString()} • Matches: ${matchesFound.toLocaleString()}`;
+      if (Array.isArray(list)) {
+        for (const obj of list) {
+          serversScanned++;
+          matchesFound += handleServerObject(obj, qn, !!exact, query);
+          if (serversScanned % 500 === 0) statusEl.textContent = `Servers scanned: ${serversScanned.toLocaleString()} • Matches: ${matchesFound.toLocaleString()}`;
+        }
+      } else if (json && typeof json === 'object') {
+        // fallback: try to interpret as an object-of-objects, or a single server
+        let iter = [];
+        try { iter = Object.values(json); } catch {}
+        if (iter.length === 0) iter = [json];
+        for (const obj of iter) {
+          serversScanned++;
+          matchesFound += handleServerObject(obj, qn, !!exact, query);
+        }
+      }
+      setState('Done', '#22c55e');
+      statusEl.textContent = `Servers scanned: ${serversScanned.toLocaleString()} • Matches: ${matchesFound.toLocaleString()}`;
+    } catch (e) {
+      setState('Error', '#ef4444');
+      statusEl.textContent = `Could not parse stream JSON (${e && e.message ? e.message : 'unknown error'}).`;
+    }
   }
 
-  // Wire UI
+  // wire up UI
   form.addEventListener('submit', (e) => {
     e.preventDefault();
     const query = nameEl.value.trim();
@@ -198,18 +214,14 @@
     runSearch(PROXY, query, exactEl && exactEl.checked).catch(err => {
       setState('Error', '#ef4444');
       statusEl.textContent = `Error: ${err.message || err}`;
-    }).finally(() => {
-      if (stopBtn) stopBtn.disabled = true;
-    });
+    }).finally(() => { if (stopBtn) stopBtn.disabled = true; });
   });
 
-  if (stopBtn) {
-    stopBtn.addEventListener('click', () => {
-      stopFlag = true;
-      if (controller) controller.abort();
-      setState('Stopped', '#f59e0b');
-    });
-  }
+  if (stopBtn) stopBtn.addEventListener('click', () => {
+    stopFlag = true;
+    if (controller) controller.abort();
+    setState('Stopped', '#f59e0b');
+  });
 </script>
 </body>
 </html>
