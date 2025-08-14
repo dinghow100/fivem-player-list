@@ -50,88 +50,166 @@
 </div></section>
 
 <script>
-const PROXY = "https://fivemplayerlist.dinghow1.workers.dev/stream"; // <-- your proxy (hard-wired)
-// Hard-wired proxy for GitHub Pages
-const STREAM_CANDIDATES = [
-  "https://fivemplayerlist.dinghow1.workers.dev/stream",
-  "https://servers-frontend.fivem.net/api/servers/stream",
-  () => `https://servers-frontend.fivem.net/api/servers/stream/${Math.floor(Date.now()/1000)}`
-];
+  // ---- Settings ----
+  const PROXY = "https://fivemplayerlist.dinghow1.workers.dev/stream"; // your Cloudflare Worker
+  const DETAIL_URL = (id) => `https://servers.fivem.net/servers/detail/${id}`;
+  const JOIN_URL   = (id) => `https://cfx.re/join/${id}`;
 
-const DETAIL_URL = id => `https://servers.fivem.net/servers/detail/${id}`;
-const JOIN_URL   = id => `https://cfx.re/join/${id}`;
+  // ---- UI refs ----
+  const form = document.getElementById('searchForm') || document.getElementById('f');
+  const nameEl = document.getElementById('name') || document.getElementById('q');
+  const exactEl = document.getElementById('exact');
+  const highlightEl = document.getElementById('highlight') || document.getElementById('hl');
+  const capEl = document.getElementById('cap');
+  const stopBtn = document.getElementById('stopBtn');
+  const statusEl = document.getElementById('status');
+  const stateTextEl = document.getElementById('state') || document.getElementById('stateText');
+  const ledEl = document.getElementById('led');
+  const tbody = (document.querySelector('#results tbody') || document.querySelector('#t tbody'));
 
-let controller=null, stopFlag=false, resultCount=0;
-const q=document.getElementById('q'), exact=document.getElementById('exact'), cap=document.getElementById('cap'), hl=document.getElementById('hl');
-const statusEl=document.getElementById('status'), led=document.getElementById('led'), state=document.getElementById('state');
-const tbody=document.querySelector('#t tbody');
+  // Default: partial match
+  if (exactEl) exactEl.checked = false;
 
-document.getElementById('f').addEventListener('submit', e=>{
-  e.preventDefault();
-  const query=q.value.trim(); if(!query){alert('Enter a player name');return;}
-  tbody.innerHTML=''; resultCount=0; stopFlag=false; setState('Connecting…','#7aa2ff');
-  document.getElementById('stopBtn').disabled=false;
-  runSearch(PROXY,query,exact.checked).catch(err=>{
-    setState('Error','#ef4444'); statusEl.textContent='Error: '+(err.message||err);
-  }).finally(()=>{document.getElementById('stopBtn').disabled=true;});
-});
-document.getElementById('stopBtn').onclick=()=>{stopFlag=true; if(controller)controller.abort(); setState('Stopped','#f59e0b');};
+  let controller = null;
+  let stopFlag = false;
+  let resultCount = 0;
 
-function setState(text,color){state.textContent=text; led.style.background=color;}
-function stripFx(s){return String(s||'').replace(/\^[0-9]/g,'');}
-function normalize(s){return stripFx(s).toLowerCase();}
-function matchName(c,q,exact){if(typeof c!=='string')return false; const v=normalize(c), n=normalize(q); return exact? v===n : v.includes(n);}
-function esc(s){return String(s).replace(/[&<>\"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;','\'':'&#39;'}[c]));}
-function fmtName(name,q){const clean=stripFx(name); if(!hl.checked)return esc(clean); const i=clean.toLowerCase().indexOf(q.toLowerCase()); if(i<0)return esc(clean); return esc(clean.slice(0,i))+'<mark>'+esc(clean.slice(i,i+q.length))+'</mark>'+esc(clean.slice(i+q.length));}
+  const setState = (txt, color) => {
+    if (stateTextEl) stateTextEl.textContent = txt;
+    if (ledEl) ledEl.style.background = color;
+  };
 
-async function runSearch(url, query, isExact){
-  setState('Scanning…','#2dd4bf');
-  const ac=new AbortController(); controller=ac;
-  const res=await fetch(url,{signal:ac.signal,headers:{Accept:'text/event-stream'},cache:'no-store',mode:'cors'});
-  if(!res.ok||!res.body) throw new Error('Stream not available ('+res.status+')');
-  const reader=res.body.getReader(); const dec=new TextDecoder();
-  let servers=0, matches=0, buf=""; let batch=[]; const qn=normalize(query);
+  const stripFx = s => String(s || '').replace(/\^[0-9]/g, '');
+  const normalize = s => stripFx(s).toLowerCase();
+  const esc = s => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  const matchName = (cand, q, exact) => typeof cand === 'string' && (exact ? normalize(cand) === q : normalize(cand).includes(q));
 
-  while(true){
-    const {value,done}=await reader.read(); if(done)break;
-    buf += dec.decode(value,{stream:true});
-    const frames = buf.split(/\n\n/); buf = frames.pop() || '';
-    for(const frame of frames){
-      const dataLines = frame.split('\n').filter(l=>l.startsWith('data:'));
-      for(const line of dataLines){
-        let obj; try{ obj = JSON.parse(line.slice(5).trim()); }catch{ continue; }
-        servers++;
-        const id = obj.EndPoint || obj.endpoint || obj.ID || obj.id;
+  const fmtName = (name, q) => {
+    const clean = stripFx(name);
+    if (!highlightEl || !highlightEl.checked) return esc(clean);
+    const i = clean.toLowerCase().indexOf(q);
+    if (i < 0) return esc(clean);
+    return esc(clean.slice(0, i)) + '<mark>' + esc(clean.slice(i, i + q.length)) + '</mark>' + esc(clean.slice(i + q.length));
+  };
+
+  function renderRow(playerName, hostname, id, clients, q) {
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td>${fmtName(playerName, q)}</td>
+      <td>${esc(hostname)}</td>
+      <td><code>${esc(id || '')}</code></td>
+      <td>${Number(clients) || 0}</td>
+      <td>${id ? `<a href="${JOIN_URL(id)}" target="_blank" rel="noopener">Join</a>` : '-'}</td>
+      <td>${id ? `<a href="${DETAIL_URL(id)}" target="_blank" rel="noopener">Details</a>` : '-'}</td>
+    `;
+    tbody.appendChild(tr);
+  }
+
+  async function runSearch(url, query, exact) {
+    setState('Scanning…', '#2dd4bf');
+    const ac = new AbortController();
+    controller = ac;
+
+    const res = await fetch(url, {
+      signal: ac.signal,
+      headers: { 'Accept': 'text/event-stream' },
+      cache: 'no-store',
+      mode: 'cors'
+    });
+    if (!res.ok || !res.body) throw new Error(`Stream not available (${res.status})`);
+
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder('utf-8');
+
+    let serversScanned = 0, matchesFound = 0;
+    const qn = normalize(query);
+    let buf = '';         // raw byte-to-text buffer
+    let eventBuf = '';    // accumulates multi-line "data:" payloads
+
+    // Helper: flush an SSE event
+    const flushEvent = () => {
+      if (!eventBuf) return;
+      try {
+        const obj = JSON.parse(eventBuf);
+        serversScanned++;
+
+        const id = obj.ID || obj.id || obj.EndPoint || obj.endpoint;
         const data = obj.Data || obj.data || {};
-        const hostname = stripFx(data.hostname || '');
+        const hostname = stripFx(data.hostname || data.sv_projectName || '');
         const clients = data.clients ?? 0;
-        const players = Array.isArray(data.players)? data.players : [];
-        const found = players.filter(p=>matchName(p?.name, qn, isExact));
-        if(found.length){
-          for(const p of found){
-            if(cap.checked && resultCount>=1500) break;
-            const tr=document.createElement('tr');
-            const nm=String(p?.name||'(unknown)');
-            tr.innerHTML = `<td>${fmtName(nm, query)}</td>
-                            <td>${esc(hostname)}</td>
-                            <td><code>${esc(id||'')}</code></td>
-                            <td>${Number(clients)||0}</td>
-                            <td><a href="${JOIN_URL(id)}" target="_blank" rel="noopener">Join</a></td>
-                            <td><a href="${DETAIL_URL(id)}" target="_blank" rel="noopener">Details</a></td>`;
-            batch.push(tr); matches++; resultCount++;
+        const players = Array.isArray(data.players) ? data.players : [];
+
+        const found = players.filter(p => matchName(p?.name, qn, !!exact));
+        for (const p of found) {
+          if (!capEl || !capEl.checked || resultCount < 1500) {
+            renderRow(String(p?.name || '(unknown)'), hostname, obj.ID || obj.id, clients, query.toLowerCase());
+            matchesFound++; resultCount++;
           }
         }
-        if(servers%200===0 || batch.length>=50){
-          statusEl.textContent = `Servers scanned: ${servers.toLocaleString()} • Matches: ${matches.toLocaleString()}`;
-          if(batch.length){ const frag=document.createDocumentFragment(); batch.forEach(r=>frag.appendChild(r)); tbody.appendChild(frag); batch=[]; }
+      } catch { /* ignore malformed frames */ }
+      eventBuf = '';
+    };
+
+    while (true) {
+      const { value, done } = await reader.read();
+      if (done) break;
+
+      buf += decoder.decode(value, { stream: true });
+
+      // Split on double newlines (handles \n\n or \r\n\r\n)
+      const frames = buf.split(/\r?\n\r?\n/);
+      buf = frames.pop() || '';
+
+      for (const frame of frames) {
+        const lines = frame.split(/\r?\n/);
+        for (const line of lines) {
+          if (line.startsWith('data:')) {
+            eventBuf += line.slice(5).trim();
+          }
+          // other SSE fields (id:, event:) are ignored
+        }
+        flushEvent();
+
+        if (serversScanned % 200 === 0) {
+          statusEl.textContent = `Servers scanned: ${serversScanned.toLocaleString()} • Matches: ${matchesFound.toLocaleString()}`;
         }
       }
+
+      if (stopFlag) break;
     }
-    if(stopFlag)break;
+
+    // flush last partial
+    flushEvent();
+
+    setState('Done', '#22c55e');
+    statusEl.textContent = `Servers scanned: ${serversScanned.toLocaleString()} • Matches: ${matchesFound.toLocaleString()}`;
   }
-  if(batch.length){ const frag=document.createDocumentFragment(); batch.forEach(r=>frag.appendChild(r)); tbody.appendChild(frag); }
-  setState('Done','#22c55e');
-}
+
+  // Wire UI
+  form.addEventListener('submit', (e) => {
+    e.preventDefault();
+    const query = nameEl.value.trim();
+    if (!query) { alert('Enter a player name'); return; }
+    tbody.innerHTML = '';
+    resultCount = 0; stopFlag = false;
+    setState('Connecting…', '#7aa2ff');
+    if (stopBtn) stopBtn.disabled = false;
+
+    runSearch(PROXY, query, exactEl && exactEl.checked).catch(err => {
+      setState('Error', '#ef4444');
+      statusEl.textContent = `Error: ${err.message || err}`;
+    }).finally(() => {
+      if (stopBtn) stopBtn.disabled = true;
+    });
+  });
+
+  if (stopBtn) {
+    stopBtn.addEventListener('click', () => {
+      stopFlag = true;
+      if (controller) controller.abort();
+      setState('Stopped', '#f59e0b');
+    });
+  }
 </script>
 </body>
 </html>
