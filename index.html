@@ -1,348 +1,131 @@
 <!doctype html>
 <html lang="en">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>FiveM Global Player Finder</title>
-  <style>
-    :root {
-      --bg: #0b0e13;
-      --muted: #9aa4b2;
-      --card: #11161f;
-      --fg: #e6edf3;
-      --accent: #7aa2ff;
-      --accent-2: #2dd4bf;
-      --warn: #f59e0b;
-      --danger: #ef4444;
-      --border: #1f2a37;
-    }
-    * { box-sizing: border-box; }
-    html, body { height: 100%; }
-    body {
-      margin: 0; font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, "Apple Color Emoji", "Segoe UI Emoji";
-      background: radial-gradient(1200px 800px at 80% -10%, #0f172a 0%, var(--bg) 40%) no-repeat fixed;
-      color: var(--fg);
-    }
-    header { padding: 24px 16px 8px; text-align: center; }
-    h1 { margin: 0 0 6px; font-size: clamp(22px, 3vw, 28px); letter-spacing: .2px; }
-    p.sub { margin: 0; color: var(--muted); font-size: 13px; }
-
-    .card { max-width: 1200px; margin: 18px auto; background: color-mix(in oklab, var(--card), black 4%); border: 1px solid var(--border); border-radius: 16px; box-shadow: 0 10px 30px rgba(0,0,0,.25); }
-    .card .content { padding: 16px; }
-
-    form#searchForm { display: grid; grid-template-columns: 1fr auto auto; gap: 10px; align-items: center; }
-    .controls { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
-    input[type="text"] { width: 100%; padding: 12px 14px; border-radius: 12px; border: 1px solid var(--border); background: #0b1220; color: var(--fg); outline: none; }
-    input[type="text"]::placeholder { color: #758195; }
-    .btn { padding: 10px 14px; border-radius: 12px; border: 1px solid var(--border); background: #0e1524; color: var(--fg); cursor: pointer; }
-    .btn.primary { background: linear-gradient(180deg, var(--accent), #5b87ff); border: none; color: white; }
-    .btn.ghost { background: transparent; }
-    .btn:disabled { opacity: .6; cursor: not-allowed; }
-
-    .chips { display: flex; gap: 12px; flex-wrap: wrap; align-items: center; color: var(--muted); font-size: 13px; }
-    .chip { display: inline-flex; gap: 8px; align-items: center; border: 1px solid var(--border); padding: 6px 10px; border-radius: 999px; background: #0b1220; }
-    .chip input { transform: translateY(1px); }
-
-    #status { margin-top: 10px; font-size: 13px; color: var(--muted); }
-
-    table { width: 100%; border-collapse: collapse; margin-top: 10px; }
-    thead { position: sticky; top: 0; z-index: 2; background: #0c1220; box-shadow: 0 1px 0 var(--border); }
-    th, td { padding: 10px 12px; border-bottom: 1px solid var(--border); text-align: left; font-size: 14px; }
-    tbody tr:nth-child(odd) { background: #0a101b; }
-    code { background: #0b1220; padding: 2px 6px; border-radius: 8px; border: 1px solid var(--border); font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; }
-
-    .badge { display: inline-flex; align-items: center; gap: 6px; padding: 3px 8px; border-radius: 999px; border: 1px solid var(--border); background: #0a1220; font-size: 12px; color: var(--muted); }
-    .badge .dot { width: 8px; height: 8px; border-radius: 50%; }
-
-    .hint { font-size: 12px; color: var(--muted); margin-top: 8px; }
-    .warn { color: var(--warn); }
-    .danger { color: var(--danger); }
-    a { color: var(--accent-2); text-decoration: none; }
-    a:hover { text-decoration: underline; }
-  </style>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>FiveM Global Player Finder</title>
+<style>
+  :root{--bg:#0b0e13;--card:#11161f;--fg:#e6edf3;--muted:#9aa4b2;--border:#1f2a37;--accent:#7aa2ff}
+  *{box-sizing:border-box}body{margin:0;background:#0b0e13;color:var(--fg);font-family:system-ui,Segoe UI,Roboto,Arial,sans-serif}
+  header{padding:24px 16px 6px;text-align:center}
+  h1{margin:0 0 6px;font-size:24px} .sub{color:var(--muted);font-size:13px;margin:0}
+  .card{max-width:1100px;margin:18px auto;background:#11161f;border:1px solid var(--border);border-radius:14px}
+  .content{padding:16px}
+  form{display:grid;grid-template-columns:1fr auto auto;gap:10px;align-items:center}
+  input[type=text]{padding:10px 12px;border-radius:10px;border:1px solid var(--border);background:#0b1220;color:var(--fg)}
+  .btn{padding:10px 14px;border-radius:10px;border:1px solid var(--border);background:#0e1524;color:var(--fg);cursor:pointer}
+  .btn.primary{background:linear-gradient(180deg,var(--accent),#5b87ff);border:none;color:#fff}
+  .chips{grid-column:1 / -1;display:flex;gap:10px;flex-wrap:wrap;color:var(--muted);font-size:13px;margin-top:4px}
+  .chip{display:inline-flex;gap:8px;align-items:center;border:1px solid var(--border);padding:6px 10px;border-radius:999px;background:#0b1220}
+  .dot{width:8px;height:8px;border-radius:50%} #status{font-size:12px;color:var(--muted);margin-top:6px}
+  table{width:100%;border-collapse:collapse;margin-top:10px}
+  thead{position:sticky;top:0;background:#0c1220;box-shadow:0 1px 0 var(--border)}
+  th,td{padding:9px 10px;border-bottom:1px solid var(--border);font-size:14px;text-align:left}
+</style>
 </head>
 <body>
-  <header>
-    <h1>FiveM Global Player Finder</h1>
-    <p class="sub">Search a player name across the live CFX masterlist and see which server they’re on. Results appear as they’re found.</p>
-  </header>
+<header>
+  <h1>FiveM Global Player Finder</h1>
+  <p class="sub">Search a player name across the live CFX masterlist. Results stream in as servers are scanned.</p>
+</header>
 
-  <section class="card">
-    <div class="content">
-      <form id="searchForm" autocomplete="off">
-        <input id="name" type="text" placeholder="Type a player name (e.g. matthew)" />
-        <button class="btn primary" type="submit" id="goBtn">Search</button>
-        <button class="btn ghost" type="button" id="stopBtn" disabled>Stop</button>
-        <div class="chips" style="grid-column: 1 / -1;">
-          <label class="chip"><input id="exact" type="checkbox" /> Exact match</label>
-          <label class="chip"><input id="highlight" type="checkbox" checked /> Highlight matches</label>
-          <span class="chip" title="The stream is large; this keeps memory sane."><input id="cap" type="checkbox" checked /> Cap results at 1500</span>
-          <span class="chip"><span class="dot" id="led" style="background:#64748b"></span><span id="stateText">Idle</span></span>
-          <button type="button" class="chip" id="setProxyBtn" title="Set a Cloudflare Worker / proxy URL so GitHub Pages can access the stream">Set Proxy</button>
-          <span class="chip" id="proxyStatus">Proxy: none</span>
-        </div>
-        <div id="status">Idle.</div>
-      </form>
-
-      <div class="hint">Hosting on GitHub Pages? You <span class="warn">must</span> set a stream proxy because the FiveM global list is an SSE endpoint with CORS. Click <strong>Set Proxy</strong> and paste your Worker URL (it should end with <code>/stream</code>). You can also pass it via the URL like <code>?proxy=https%3A%2F%2Fyour-worker.workers.dev%2Fstream</code>.</div>
-
-      <table id="results">
-        <thead>
-          <tr>
-            <th>Player</th>
-            <th>Server</th>
-            <th>Server ID</th>
-            <th>Players</th>
-            <th>Join</th>
-            <th>Details</th>
-          </tr>
-        </thead>
-        <tbody></tbody>
-      </table>
+<section class="card"><div class="content">
+  <form id="f">
+    <input id="q" type="text" placeholder="Type a player name (e.g. matthew)"/>
+    <button class="btn primary" type="submit">Search</button>
+    <button class="btn" type="button" id="stopBtn">Stop</button>
+    <div class="chips">
+      <label class="chip"><input id="exact" type="checkbox"/> Exact match</label>
+      <label class="chip"><input id="hl" type="checkbox" checked/> Highlight</label>
+      <span class="chip"><input id="cap" type="checkbox" checked/> Cap 1500</span>
+      <span class="chip"><span class="dot" id="led" style="background:#64748b"></span><span id="state">Idle</span></span>
+      <span class="chip">Proxy: fivemplayerlist.dinghow1.workers.dev</span>
     </div>
-  </section>
+    <div id="status">Idle.</div>
+  </form>
 
-  <script>
-    // --- Proxy handling ------------------------------------------------------
-    function getProxyFromUrlOrStorage() {
-      let proxy = null;
-      try {
-        const u = new URL(window.location.href);
-        const p = u.searchParams.get('proxy');
-        if (p) {
-          proxy = p;
-          localStorage.setItem('proxyUrl', proxy);
-        } else {
-          proxy = localStorage.getItem('proxyUrl');
-        }
-      } catch (_) { /* ignore */ }
-      return proxy || null;
-    }
+  <table id="t"><thead>
+    <tr><th>Player</th><th>Server</th><th>Server ID</th><th>Players</th><th>Join</th><th>Details</th></tr>
+  </thead><tbody></tbody></table>
+</div></section>
 
-    const PROXY_URL = getProxyFromUrlOrStorage();
+<script>
+const PROXY = "https://fivemplayerlist.dinghow1.workers.dev/stream"; // <-- your proxy (hard-wired)
 
-    // Order of candidates: user proxy (if set) -> direct (may be CORS) -> timestamped variant
-    const STREAM_CANDIDATES = [
-      ...(PROXY_URL ? [PROXY_URL] : []),
-      'https://servers-frontend.fivem.net/api/servers/stream',
-      () => `https://servers-frontend.fivem.net/api/servers/stream/${Math.floor(Date.now()/1000)}`
-    ];
+const DETAIL_URL = id => `https://servers.fivem.net/servers/detail/${id}`;
+const JOIN_URL   = id => `https://cfx.re/join/${id}`;
 
-    const DETAIL_URL = (id) => `https://servers.fivem.net/servers/detail/${id}`;
-    const JOIN_URL = (id) => `https://cfx.re/join/${id}`;
+let controller=null, stopFlag=false, resultCount=0;
+const q=document.getElementById('q'), exact=document.getElementById('exact'), cap=document.getElementById('cap'), hl=document.getElementById('hl');
+const statusEl=document.getElementById('status'), led=document.getElementById('led'), state=document.getElementById('state');
+const tbody=document.querySelector('#t tbody');
 
-    let controller = null;
-    let stopFlag = false;
-    let resultCount = 0;
+document.getElementById('f').addEventListener('submit', e=>{
+  e.preventDefault();
+  const query=q.value.trim(); if(!query){alert('Enter a player name');return;}
+  tbody.innerHTML=''; resultCount=0; stopFlag=false; setState('Connecting…','#7aa2ff');
+  document.getElementById('stopBtn').disabled=false;
+  runSearch(PROXY,query,exact.checked).catch(err=>{
+    setState('Error','#ef4444'); statusEl.textContent='Error: '+(err.message||err);
+  }).finally(()=>{document.getElementById('stopBtn').disabled=true;});
+});
+document.getElementById('stopBtn').onclick=()=>{stopFlag=true; if(controller)controller.abort(); setState('Stopped','#f59e0b');};
 
-    const nameEl = document.getElementById('name');
-    const exactEl = document.getElementById('exact');
-    const capEl = document.getElementById('cap');
-    const highlightEl = document.getElementById('highlight');
-    const statusEl = document.getElementById('status');
-    const ledEl = document.getElementById('led');
-    const stateTextEl = document.getElementById('stateText');
-    const tbody = document.querySelector('#results tbody');
-    const proxyStatus = document.getElementById('proxyStatus');
+function setState(text,color){state.textContent=text; led.style.background=color;}
+function stripFx(s){return String(s||'').replace(/\^[0-9]/g,'');}
+function normalize(s){return stripFx(s).toLowerCase();}
+function matchName(c,q,exact){if(typeof c!=='string')return false; const v=normalize(c), n=normalize(q); return exact? v===n : v.includes(n);}
+function esc(s){return String(s).replace(/[&<>\"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;','\'':'&#39;'}[c]));}
+function fmtName(name,q){const clean=stripFx(name); if(!hl.checked)return esc(clean); const i=clean.toLowerCase().indexOf(q.toLowerCase()); if(i<0)return esc(clean); return esc(clean.slice(0,i))+'<mark>'+esc(clean.slice(i,i+q.length))+'</mark>'+esc(clean.slice(i+q.length));}
 
-    // Show proxy status
-    try {
-      proxyStatus.textContent = 'Proxy: ' + (PROXY_URL ? new URL(PROXY_URL).hostname : 'none');
-    } catch { proxyStatus.textContent = 'Proxy: invalid'; }
+async function runSearch(url, query, isExact){
+  setState('Scanning…','#2dd4bf');
+  const ac=new AbortController(); controller=ac;
+  const res=await fetch(url,{signal:ac.signal,headers:{Accept:'text/event-stream'},cache:'no-store',mode:'cors'});
+  if(!res.ok||!res.body) throw new Error('Stream not available ('+res.status+')');
+  const reader=res.body.getReader(); const dec=new TextDecoder();
+  let servers=0, matches=0, buf=""; let batch=[]; const qn=normalize(query);
 
-    // Allow setting proxy interactively
-    document.getElementById('setProxyBtn').addEventListener('click', () => {
-      const current = localStorage.getItem('proxyUrl') || '';
-      const val = prompt('Enter stream proxy URL (must end with /stream):', current);
-      if (val === null) return;
-      const trimmed = val.trim();
-      if (trimmed === '') {
-        localStorage.removeItem('proxyUrl');
-        alert('Proxy cleared. Reloading…');
-        location.reload();
-        return;
-      }
-      try { new URL(trimmed); } catch { alert('Invalid URL'); return; }
-      localStorage.setItem('proxyUrl', trimmed);
-      alert('Proxy saved. Reloading…');
-      location.reload();
-    });
-
-    document.getElementById('searchForm').addEventListener('submit', (e) => {
-      e.preventDefault();
-      const query = nameEl.value.trim();
-      if (!query) { alert('Enter a player name'); return; }
-      tbody.innerHTML = '';
-      resultCount = 0;
-      stopFlag = false;
-      setState('Connecting…', '#7aa2ff');
-      document.getElementById('stopBtn').disabled = false;
-      runWithFallback(query, exactEl.checked).catch((err) => {
-        setState('Error', '#ef4444');
-        statusEl.innerHTML = `Error: ${escapeHtml(err.message || err)}. <span class="hint">If you are on GitHub Pages, set a proxy via the button above or add <code>?proxy=...</code> to the URL.</span>`;
-        console.error(err);
-      }).finally(() => {
-        document.getElementById('stopBtn').disabled = true;
-      });
-    });
-
-    document.getElementById('stopBtn').addEventListener('click', () => {
-      stopFlag = true;
-      if (controller) controller.abort();
-      setState('Stopped', '#f59e0b');
-    });
-
-    function setState(text, color) {
-      stateTextEl.textContent = text;
-      ledEl.style.background = color;
-    }
-
-    async function runWithFallback(query, exact) {
-      let lastErr;
-      for (const cand of STREAM_CANDIDATES) {
-        const url = typeof cand === 'function' ? cand() : cand;
-        try {
-          await runSearch(url, query, exact);
-          return;
-        } catch (e) {
-          lastErr = e;
-          if (stopFlag) break;
-          console.warn('Stream candidate failed:', url, e);
-        }
-      }
-      throw lastErr || new Error('No working stream endpoint.');
-    }
-
-    // Robust SSE reader: handles multi-line data: events
-    async function runSearch(url, query, exact) {
-      setState('Scanning…', '#2dd4bf');
-
-      const ac = new AbortController();
-      controller = ac;
-      const res = await fetch(url, {
-        method: 'GET',
-        signal: ac.signal,
-        headers: { 'Accept': 'text/event-stream' },
-        cache: 'no-store',
-        mode: 'cors'
-      });
-      if (!res.ok || !res.body) throw new Error(`Stream not available (${res.status})`);
-
-      const reader = res.body.getReader();
-      const decoder = new TextDecoder('utf-8');
-
-      let serversScanned = 0, matchesFound = 0;
-      const q = normalize(query);
-
-      const flushBatch = (rows) => {
-        const frag = document.createDocumentFragment();
-        rows.forEach((tr) => frag.appendChild(tr));
-        tbody.appendChild(frag);
-      };
-      let batch = [];
-
-      // SSE state
-      let sseBuf = '';
-      let dataBuf = '';
-
-      while (true) {
-        const { value, done } = await reader.read();
-        if (done) break;
-        sseBuf += decoder.decode(value, { stream: true });
-
-        // split by lines and process SSE frames
-        let idx;
-        while ((idx = sseBuf.indexOf('
-')) !== -1) {
-          const line = sseBuf.slice(0, idx).replace(/
-$/, '');
-          sseBuf = sseBuf.slice(idx + 1);
-
-          if (line.startsWith('data:')) {
-            dataBuf += line.slice(5).trim();
-          } else if (line === '') {
-            if (dataBuf) {
-              try {
-                const obj = JSON.parse(dataBuf);
-                serversScanned++;
-                handleServer(obj, q, exact, batch, () => { matchesFound++; });
-                if (serversScanned % 200 === 0 || batch.length >= 50) {
-                  statusEl.textContent = `Servers scanned: ${serversScanned.toLocaleString()} • Matches: ${matchesFound.toLocaleString()}`;
-                  if (batch.length) { flushBatch(batch); batch = []; }
-                }
-              } catch (e) {
-                // ignore malformed frame
-              }
-            }
-            dataBuf = '';
+  while(true){
+    const {value,done}=await reader.read(); if(done)break;
+    buf += dec.decode(value,{stream:true});
+    const frames = buf.split(/\n\n/); buf = frames.pop() || '';
+    for(const frame of frames){
+      const dataLines = frame.split('\n').filter(l=>l.startsWith('data:'));
+      for(const line of dataLines){
+        let obj; try{ obj = JSON.parse(line.slice(5).trim()); }catch{ continue; }
+        servers++;
+        const id = obj.EndPoint || obj.endpoint || obj.ID || obj.id;
+        const data = obj.Data || obj.data || {};
+        const hostname = stripFx(data.hostname || '');
+        const clients = data.clients ?? 0;
+        const players = Array.isArray(data.players)? data.players : [];
+        const found = players.filter(p=>matchName(p?.name, qn, isExact));
+        if(found.length){
+          for(const p of found){
+            if(cap.checked && resultCount>=1500) break;
+            const tr=document.createElement('tr');
+            const nm=String(p?.name||'(unknown)');
+            tr.innerHTML = `<td>${fmtName(nm, query)}</td>
+                            <td>${esc(hostname)}</td>
+                            <td><code>${esc(id||'')}</code></td>
+                            <td>${Number(clients)||0}</td>
+                            <td><a href="${JOIN_URL(id)}" target="_blank" rel="noopener">Join</a></td>
+                            <td><a href="${DETAIL_URL(id)}" target="_blank" rel="noopener">Details</a></td>`;
+            batch.push(tr); matches++; resultCount++;
           }
         }
-
-        if (stopFlag) break;
-      }
-
-      if (batch.length) flushBatch(batch);
-      setState('Done', '#22c55e');
-      statusEl.textContent = `Servers scanned: ${serversScanned.toLocaleString()} • Matches: ${matchesFound.toLocaleString()}`;
-    }
-
-    function handleServer(obj, q, exact, batch, onMatch) {
-      const id = obj.EndPoint || obj.endpoint || obj.ID || obj.id;
-      const data = obj.Data || obj.data || {};
-      const hostname = stripFxColors(String(data.hostname || ''));
-      const clients = data.clients ?? 0;
-      const players = Array.isArray(data.players) ? data.players : [];
-
-      const found = players.filter((p) => matchName(p && p.name, q, exact));
-      if (found.length) {
-        for (const p of found) {
-          if (capEl.checked && resultCount >= 1500) break;
-          const tr = document.createElement('tr');
-          const playerName = String(p && p.name ? p.name : '(unknown)');
-          tr.innerHTML = `
-            <td>${formatName(playerName, q)}</td>
-            <td>${escapeHtml(hostname)}</td>
-            <td><code>${escapeHtml(id || '')}</code></td>
-            <td>${Number(clients) || 0}</td>
-            <td><a href="${JOIN_URL(id)}" target="_blank" rel="noopener">Join</a></td>
-            <td><a href="${DETAIL_URL(id)}" target="_blank" rel="noopener">Details</a></td>`;
-          batch.push(tr);
-          onMatch(); resultCount++;
+        if(servers%200===0 || batch.length>=50){
+          statusEl.textContent = `Servers scanned: ${servers.toLocaleString()} • Matches: ${matches.toLocaleString()}`;
+          if(batch.length){ const frag=document.createDocumentFragment(); batch.forEach(r=>frag.appendChild(r)); tbody.appendChild(frag); batch=[]; }
         }
       }
     }
-
-    function matchName(candidate, q, exact) {
-      if (typeof candidate !== 'string') return false;
-      const c = normalize(candidate);
-      return exact ? c === q : c.includes(q);
-    }
-
-    function normalize(s) {
-      return stripFxColors(String(s)).toLowerCase();
-    }
-
-    function stripFxColors(s) {
-      // remove ^0-^9 color codes
-      return s.replace(/\^[0-9]/g, '');
-    }
-
-    function escapeHtml(s) {
-      return String(s).replace(/[&<>"']/g, (c) => ({
-        '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
-      })[c]);
-    }
-
-    function formatName(name, q) {
-      const clean = stripFxColors(String(name));
-      if (!highlightEl.checked) return escapeHtml(clean);
-      const idx = clean.toLowerCase().indexOf(q);
-      if (idx === -1) return escapeHtml(clean);
-      const before = escapeHtml(clean.slice(0, idx));
-      const mid = escapeHtml(clean.slice(idx, idx + q.length));
-      const after = escapeHtml(clean.slice(idx + q.length));
-      return `${before}<mark style="background:#3b82f6; color:white; padding:1px 4px; border-radius:6px;">${mid}</mark>${after}`;
-    }
-  </script>
+    if(stopFlag)break;
+  }
+  if(batch.length){ const frag=document.createDocumentFragment(); batch.forEach(r=>frag.appendChild(r)); tbody.appendChild(frag); }
+  setState('Done','#22c55e');
+}
+</script>
 </body>
 </html>
